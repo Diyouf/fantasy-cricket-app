@@ -1,7 +1,11 @@
 const express = require("express");
 const app = express();
+const fs = require("fs");
+const path = require("path");
 const port = 3000;
 const validateTeam = require("./utils/teamValidation");
+const calculatePlayerPoints = require("./utils/calculatePoints");
+const updateTeamPoints = require("./utils/updateTeamPoint");
 
 require("dotenv").config();
 app.use(express.json());
@@ -82,6 +86,12 @@ app.post("/add-team", async (req, res) => {
     if (!isValidTeam)
       return res.status(400).json({ message: "Invalid team data" });
 
+    // Check if the team name already exists
+    const existingTeam = await db.collection("Teams").findOne({ teamName });
+    if (existingTeam) {
+      return res.status(400).json({ message: "Team name already exists" });
+    }
+
     // Create a new team document
     const newTeam = {
       teamName,
@@ -98,8 +108,65 @@ app.post("/add-team", async (req, res) => {
       teamId: result.insertedId,
     });
   } catch (error) {
-    console.error("Error saving team:", error);
-    res.status(500).json({ message: "Failed to create team" });
+    res.status(500).json({ message: error.message });
+  }
+});
+
+
+
+app.get("/process-result", async (req, res) => {
+  try {
+    // Read match data from match.json
+    const matchDataPath = path.join(__dirname, "data", "match.json");
+    const matchData = JSON.parse(fs.readFileSync(matchDataPath, "utf8"));
+    // Calculate points for each player
+    const playerPoints = await calculatePlayerPoints(matchData);
+    // fetching the teams
+    const teams = await db.collection("Teams").find({}).toArray();
+
+    const updatedTeams = await updateTeamPoints(playerPoints, teams);
+
+       // Update each team in the database with the new points
+    for (const team of updatedTeams) {
+      await db.collection("Teams").updateOne(
+        { teamName: team.teamName },
+        { $set: { points: team.teamPoints, playerPoints: team.teamPlayerPoints } }
+      );
+    }
+
+    res.status(200).json({ message: "Match results processed successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to process result" });
+  }
+});
+
+
+
+app.get("/team-result", async (req, res) => {
+  try {
+    // Fetch all teams with their points
+    const teams = await db.collection("Teams").find({}).toArray();
+
+    // Find the maximum points
+    const maxPoints = Math.max(...teams.map(team => team.points));
+
+    // Find the top teams with the maximum points
+    const topTeams = teams.filter(team => team.points === maxPoints);
+
+    // Prepare the response
+    const response = {
+      topTeams: topTeams.map(team => ({
+        teamName: team.teamName,
+        points: team.points,
+        playerPoints: team.playerPoints
+      })),
+      maxPoints
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error("Error fetching team results:", error);
+    res.status(500).json({ message: "Failed to fetch team results" });
   }
 });
 
