@@ -81,16 +81,24 @@ app.post("/add-team", async (req, res) => {
   try {
     const { teamName, players, captain, viceCaptain } = req.body;
 
-    // Validate the team data
-    const isValidTeam = validateTeam(teamName, players, captain, viceCaptain);
-    if (!isValidTeam)
-      return res.status(400).json({ message: "Invalid team data" });
-
+    const playerDataPath = path.join(__dirname, "data", "players.json");
+    const playerData = JSON.parse(fs.readFileSync(playerDataPath, "utf8"));
+    
     // Check if the team name already exists
     const existingTeam = await db.collection("Teams").findOne({ teamName });
     if (existingTeam) {
       return res.status(400).json({ message: "Team name already exists" });
     }
+    // Validate the team data
+    const isValidTeam = validateTeam(
+      teamName,
+      players,
+      captain,
+      viceCaptain
+    );
+    if (!isValidTeam)
+      return res.status(400).json({ message: "Invalid team data" });
+
 
     // Create a new team document
     const newTeam = {
@@ -112,8 +120,6 @@ app.post("/add-team", async (req, res) => {
   }
 });
 
-
-
 app.get("/process-result", async (req, res) => {
   try {
     // Read match data from match.json
@@ -126,12 +132,19 @@ app.get("/process-result", async (req, res) => {
 
     const updatedTeams = await updateTeamPoints(playerPoints, teams);
 
-       // Update each team in the database with the new points
+    // Update each team in the database with the new points
     for (const team of updatedTeams) {
-      await db.collection("Teams").updateOne(
-        { teamName: team.teamName },
-        { $set: { points: team.teamPoints, playerPoints: team.teamPlayerPoints } }
-      );
+      await db
+        .collection("Teams")
+        .updateOne(
+          { teamName: team.teamName },
+          {
+            $set: {
+              points: team.teamPoints,
+              playerPoints: team.teamPlayerPoints,
+            },
+          }
+        );
     }
 
     res.status(200).json({ message: "Match results processed successfully" });
@@ -140,27 +153,25 @@ app.get("/process-result", async (req, res) => {
   }
 });
 
-
-
 app.get("/team-result", async (req, res) => {
   try {
     // Fetch all teams with their points
     const teams = await db.collection("Teams").find({}).toArray();
 
     // Find the maximum points
-    const maxPoints = Math.max(...teams.map(team => team.points));
+    const maxPoints = Math.max(...teams.map((team) => team.points));
 
     // Find the top teams with the maximum points
-    const topTeams = teams.filter(team => team.points === maxPoints);
+    const topTeams = teams.filter((team) => team.points === maxPoints);
 
     // Prepare the response
     const response = {
-      topTeams: topTeams.map(team => ({
+      topTeams: topTeams.map((team) => ({
         teamName: team.teamName,
         points: team.points,
-        playerPoints: team.playerPoints
+        playerPoints: team.playerPoints,
       })),
-      maxPoints
+      maxPoints,
     };
 
     res.status(200).json(response);

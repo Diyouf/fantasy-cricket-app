@@ -8,6 +8,21 @@ const validateTeam = (teamName, players, captain, viceCaptain) => {
     throw new Error("A team must have exactly 11 players.");
   }
 
+  const playerNamesSet = new Set();
+  const duplicatePlayer = players.find((player) => {
+    if (playerNamesSet.has(player.Player)) {
+      return true;
+    } else {
+      playerNamesSet.add(player.Player);
+      return false;
+    }
+  });
+  if (duplicatePlayer) {
+    throw new Error(
+      `Duplicate player name ${duplicatePlayer.Player} found in the team.`
+    );
+  }
+
   const playerCountByType = {
     WK: 0,
     BAT: 0,
